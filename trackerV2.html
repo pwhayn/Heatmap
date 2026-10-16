@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Ces lignes permettent d'ouvrir la page en plein écran quand elle est ajoutée à l'écran d'accueil de l'iPhone -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tracker">
+<meta name="theme-color" content="#0e0f11">
+<title>Tracker</title>
+<!-- La police : Noto Sans JP, une police gothique (sans empattements), le style le plus courant au Japon -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500&display=swap">
+
+<style>
+/* ===== COULEURS =====
+   Pour changer l'ambiance, modifie ces valeurs.
+   --l4 : couleur des cases pleines / --l0 : cases vides / --bg : fond de la page */
+:root{
+  --bg:#0e0f11; --text:#d9dade; --dim:#7a7d85;
+  --edge:#25282f; --l0:#15171b; --l4:#f1efe9; --focus:#f1efe9; --panel:#15171b;
+  --cell:14px; --gap:3px;   /* taille des cases et espace entre elles : modifiés par le zoom (Paramètres) */
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px);
+}
+/* Si le téléphone est en mode clair, on utilise ces couleurs à la place */
+@media (prefers-color-scheme: light){
+  :root:not([data-theme]){
+    --bg:#f5f3ee; --text:#1f1f22; --dim:#85878d;
+    --edge:#dedbd3; --l0:#e9e6df; --l4:#17181a; --focus:#17181a; --panel:#ebe8e1;
+  }
+}
+:root[data-theme="dark"]{ color-scheme:dark; }
+/* Thèmes choisis dans les Paramètres (« Auto » = aucun attribut : la page suit le mode clair/sombre du téléphone) */
+:root[data-theme="nuit"]{ color-scheme:dark; --bg:#0e0f11; --text:#d9dade; --dim:#7a7d85; --edge:#25282f; --l0:#15171b; --l4:#f1efe9; --focus:#f1efe9; --panel:#15171b; }
+:root[data-theme="papier"]{ --bg:#f5f3ee; --text:#1f1f22; --dim:#85878d; --edge:#dedbd3; --l0:#e9e6df; --l4:#17181a; --focus:#17181a; --panel:#ebe8e1; }
+:root[data-theme="sepia"]{ --bg:#f0e4cc; --text:#3a2e21; --dim:#8c7b62; --edge:#dccfb2; --l0:#e6d8bc; --l4:#4a3524; --focus:#4a3524; --panel:#e9dcc2; }
+
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; min-height:100vh; background:var(--bg); color:var(--text);
+  font-family:"Noto Sans JP","Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif; font-size:15px;
+}
+main{max-width:900px;margin:0 auto;padding:28px 18px 96px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+:focus-visible{outline:1px solid var(--focus);outline-offset:2px}
+
+/* ===== UNE HABITUDE ===== */
+.habit{margin-bottom:32px}
+.hd{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.nm{text-align:left;min-width:0;font-weight:500;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ctl{display:flex;align-items:center;gap:8px;flex:none}
+.sq{width:28px;height:28px;border:1px solid var(--edge);border-radius:6px;line-height:1;font-size:16px}
+.sq.chk{width:24px;height:24px;border-color:var(--dim);transition:background .12s}
+.sq.chk.on{background:var(--l4);border-color:var(--l4)}
+.val{min-width:70px;text-align:center;font-size:14px}
+/* Fenêtre de saisie d'une quantité */
+.entry{display:flex;align-items:center;justify-content:center;gap:18px;margin:6px 0 4px}
+.entry .sq{width:46px;height:46px;font-size:22px}
+.big{min-width:140px;text-align:center;font-size:18px}
+.btn.tg{min-width:170px;padding:14px;font-size:16px}
+.btn.tg.on{background:var(--l4);color:var(--bg);border-color:var(--l4)}
+
+/* ===== LA HEATMAP ===== */
+.map{display:flex}
+.days{display:grid;grid-template-rows:repeat(7,var(--cell));gap:var(--gap);margin-right:8px;color:var(--dim);font-size:clamp(7px,calc(var(--cell)*.72),11px);line-height:var(--cell)}
+.scroll{flex:1;min-width:0;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.months{position:relative;height:16px;margin-bottom:3px;width:max-content;min-width:100%}
+.months span{position:absolute;top:0;color:var(--dim);font-size:11px;white-space:nowrap}
+/* padding-right : évite que la dernière colonne soit coupée au bord */
+.grid{display:grid;grid-template-rows:repeat(7,var(--cell));grid-auto-flow:column;grid-auto-columns:var(--cell);gap:var(--gap);width:max-content;padding-right:6px}
+/* Taille des cases : réglée par le zoom dans les Paramètres (variables --cell et --gap) */
+.c{width:var(--cell);height:var(--cell);border-radius:calc(var(--cell)*.22);border:1px solid var(--edge);background:var(--l0)}
+.c.on{border-color:transparent}
+.c.future{visibility:hidden}
+.c.today{box-shadow:0 0 0 1px var(--bg),0 0 0 2px var(--dim)}
+.c.sel{box-shadow:0 0 0 1px var(--bg),0 0 0 2px var(--focus)}
+.empty{color:var(--dim);text-align:center;margin-top:20vh;line-height:1.8}
+
+/* ===== BARRE DU BAS ===== */
+.bar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:space-between;
+  padding:10px 18px calc(10px + env(safe-area-inset-bottom,0px));
+  background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  border-top:1px solid var(--edge);font-size:13px}
+.bar button{color:var(--dim);padding:4px 2px}
+.bar button:hover{color:var(--text)}
+/* onglets des pages (en bas à gauche) et boutons de droite */
+.tabs,.right{display:flex;gap:16px}
+.tabs{flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs button,.right{flex:none;white-space:nowrap}
+.right{margin-left:16px}
+.bar button.on{color:var(--text)}
+#new{font-size:20px;line-height:1;padding:0 4px}
+
+/* ===== FENÊTRES (création, données) ===== */
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:5}
+#ov[hidden]{display:none}
+.sheet{width:100%;max-width:460px;background:var(--bg);border:1px solid var(--edge);border-radius:14px 14px 0 0;
+  padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));max-height:90vh;overflow:auto}
+.sheet h3{margin:0 0 16px;font-size:15px;font-weight:500}
+label{display:block;color:var(--dim);font-size:12px;margin:0 0 5px}
+.f{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.f>div:first-child{grid-column:1/-1}
+input,textarea{width:100%;font:inherit;font-size:16px;color:var(--text);background:var(--panel);border:1px solid var(--edge);border-radius:6px;padding:9px 11px;min-width:0}
+textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;height:240px;resize:vertical;margin-top:10px;white-space:pre}
+.sec{margin:22px 0 0;padding-top:16px;border-top:1px solid var(--edge)}
+.sec:first-of-type{border-top:0;padding-top:0;margin-top:0}
+.sec h4{margin:0 0 4px;font-size:14px;font-weight:500}
+.sec p{margin:0 0 12px;color:var(--dim);font-size:13px;line-height:1.5}
+.sec .acts{margin-top:0}
+/* pastilles de couleur (création d'une habitude) */
+.sw{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.sw button{width:26px;height:26px;border-radius:50%;border:1px solid var(--edge)}
+.sw button.on{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--focus)}
+/* pastille « spectre » : ouvre le sélecteur de couleur du téléphone / de l'ordinateur */
+.pickbox{position:relative;display:block;width:26px;height:26px;border-radius:50%;border:1px solid var(--edge);overflow:hidden;background:conic-gradient(#f66,#fd6,#7d7,#6dd,#66f,#d6d,#f66);cursor:pointer}
+.pickbox.on{box-shadow:0 0 0 2px var(--bg),0 0 0 3px var(--focus)}
+.pickbox input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
+/* réglages d'affichage */
+.seg{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.seg .btn.on{background:var(--l4);color:var(--bg);border-color:var(--l4)}
+input[type=range]{padding:0;accent-color:var(--l4)}
+.zr{display:flex;align-items:center;gap:12px}
+.zr span{min-width:52px;text-align:right}
+/* note du jour (cachée dans un menu repliable) */
+.note textarea{height:80px;font-family:inherit;font-size:16px;white-space:normal;margin-top:8px}
+/* page Stats */
+.sgrp{color:var(--dim);font-size:12px;margin:26px 0 14px;letter-spacing:.04em}
+.st{margin-bottom:22px}
+.sth{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+.sth b,.sth span{font-weight:500;font-size:16px}
+.stbar{height:5px;border-radius:3px;background:var(--l0);overflow:hidden}
+.stbar i{display:block;height:100%;border-radius:3px}
+.sts{color:var(--dim);font-size:12px;margin-top:6px}
+/* graphiques de la page Stats */
+.cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:6px 0 8px}
+.card{border:1px solid var(--edge);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.card b{font-weight:500;font-size:20px}
+.card span{color:var(--dim);font-size:12px}
+.ch{margin-top:30px}
+.ch h4{margin:0 0 14px;font-size:14px;font-weight:500}
+.ch p{color:var(--dim);font-size:12px;margin:8px 0 0}
+.dn{display:flex;align-items:center;gap:20px}
+.donut{width:130px;height:130px;flex:none;display:block}
+.lg{display:flex;flex-direction:column;gap:8px;font-size:13px;min-width:0;flex:1}
+.lg div{display:flex;align-items:center;gap:8px}
+.lg i{width:9px;height:9px;border-radius:50%;flex:none}
+.lg em{font-style:normal;color:var(--dim);margin-left:auto;padding-left:10px;white-space:nowrap}
+.bars{width:100%;height:auto;display:block}
+/* minuteur et liste des pages */
+.tm{flex:none;font-size:12px;color:var(--dim);padding:4px 0}
+.tmr{margin-top:16px;text-align:center}
+.tmr:empty{display:none}
+.prow{display:flex;gap:6px;margin-bottom:8px}
+.prow .btn{padding:9px 11px}
+/* notes, archive, comparaison, résumé de la semaine */
+.search{margin-bottom:18px}
+.nt{padding:16px 0 6px;border-top:1px solid var(--edge)}
+.ntd{font-size:15px;font-weight:500;margin-bottom:6px}
+.nr{padding:8px 0;cursor:pointer}
+.nbar{display:flex;gap:8px;margin-bottom:10px}
+.nbar .search{margin-bottom:0;flex:1}
+.nbar .btn{flex:none;padding:9px 12px;font-size:13px}
+.nth{display:flex;align-items:center;gap:8px;font-size:13px}
+.nth i{width:8px;height:8px;border-radius:50%;flex:none}
+.nth span{color:var(--dim);font-size:13px}
+.nt p{margin:4px 0 0 17px;white-space:pre-wrap;line-height:1.5}
+.arow{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--edge)}
+.at{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.at span{color:var(--dim);font-size:12px}
+.hint{color:var(--dim);font-size:13px;line-height:1.5;margin:0 0 14px}
+.cb{display:grid;grid-template-columns:62px 1fr 64px;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-top:6px}
+.cb span:last-child{text-align:right;color:var(--text)}
+.cmp{margin-top:18px}
+.wk{border:1px solid var(--edge);border-radius:10px;padding:14px 16px;margin-bottom:28px}
+.wk h4{margin:0 0 8px;font-size:14px;font-weight:500}
+.wk p{margin:4px 0;font-size:13px;color:var(--dim)}
+.wk .btn{margin-top:10px;padding:6px 12px}
+.acts{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap}
+.btn{padding:9px 14px;border:1px solid var(--edge);border-radius:6px}
+.btn.main{background:var(--l4);color:var(--bg);border-color:var(--l4)}
+.btn.del{margin-left:auto;color:var(--dim)}
+details{margin-top:18px;color:var(--dim);font-size:13px}
+summary{cursor:pointer}
+#msg{color:var(--dim);font-size:13px;margin-top:12px}
+</style>
+</head>
+
+<body>
+<main id="habits"></main>
+<div class="bar"><nav class="tabs" id="tabs"></nav><div class="right"><button id="new" aria-label="Ajouter une habitude">+</button><button id="dat">Paramètres</button></div></div>
+<div id="ov" hidden><div class="sheet" id="sheet"></div></div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+
+<script>
+/* ============================================================
+   1. OUTILS DE BASE
+   ============================================================ */
+const KEY = 'tracker-v2';                    // nom sous lequel les données sont gardées dans le navigateur
+const $ = s => document.querySelector(s);    // raccourci : $('#id') trouve un élément de la page
+
+// Noms des mois en kanji et des jours de la semaine (lundi en premier)
+const MONTHS = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+const WEEK   = ['月','火','水','木','金','土','日'];
+
+// Transforme une date en texte "2026-10-14" (sert de clé pour retrouver un jour)
+const key = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+// Affiche un nombre avec une virgule (0,25) et sans décimales inutiles
+const fmt = n => String(Math.round(n*100)/100).replace('.',',');
+// Lit un nombre tapé par l'utilisateur ; si invalide, renvoie la valeur par défaut
+const num = (s,def) => { const v = parseFloat(String(s).replace(',','.')); return v>0 ? v : def; };
+
+/* ============================================================
+   2. DONNÉES
+   state = { habits: [ {id, name, goal, unit, step} ],
+             log:    { idHabitude: { "2026-10-14": 1.5, ... } } }
+   ============================================================ */
+function seed(){ // Données de démonstration au premier lancement
+  const habits = [
+    {id:'h1', name:'水を飲む', goal:2,  unit:'L',     step:0.25},
+    {id:'h2', name:'読書',     goal:10, unit:'pages', step:1},
+    {id:'h3', name:'運動',     goal:1,  unit:'',      step:1}];
+  const log = {}, t = new Date();
+  habits.forEach(h => {
+    log[h.id] = {};
+    for(let i=1;i<260;i++){
+      if(Math.random() < 0.1 + 0.6*(1-i/260)){
+        const d = new Date(t); d.setDate(t.getDate()-i);
+        const r = Math.random()<.45 ? 1 : Math.random();
+        const v = Math.round(h.goal*r/h.step)*h.step;
+        if(v>0) log[h.id][key(d)] = v;
+      }
+    }
+  });
+  return {habits, log};
+}
+// Vérifie qu'un objet a la bonne forme (utile pour l'import) et le nettoie
+function clean(o){
+  if(!o || !Array.isArray(o.habits) || typeof o.log!=='object') return null;
+  o.habits = o.habits.filter(h => h && h.id && h.name).map(h => ({
+    id:String(h.id), name:String(h.name), goal:num(h.goal,1), unit:String(h.unit||''), step:num(h.step,1),
+    color:/^#[0-9a-f]{6}$/i.test(h.color) ? h.color : '',
+    page:String(h.page||''), archived:!!h.archived}));    // page : identifiant de la page ('' = aucune)      // couleur : '' = couleur du thème
+  o.notes = (o.notes && typeof o.notes==='object') ? o.notes : {};
+  // Pages créées par l'utilisateur. Anciennes données : on garde « Quotidien » / « Loisirs » seulement si des habitudes y étaient rangées.
+  if(Array.isArray(o.pages)){
+    o.pages = o.pages.filter(p => p && p.id && p.name).map(p => ({id:String(p.id), name:String(p.name)}));
+  }else{
+    o.pages = o.habits.some(h => h.page==='hobby') ? [{id:'daily',name:'Quotidien'},{id:'hobby',name:'Loisirs'}] : [];
+    if(!o.pages.length) o.habits.forEach(h => h.page = '');
+  }
+  return o;
+}
+function load(){
+  try{ const r = localStorage.getItem(KEY); if(r){ const o = clean(JSON.parse(r)); if(o) return o; } }catch(e){}
+  return seed();
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+let state = load();
+state.notes = state.notes || {};   // notes : { idHabitude: { "2026-10-14": "texte" } }
+state.pages = state.pages || [];   // pages créées par l'utilisateur : [ {id, name} ] (aucune par défaut)
+
+// Réglages d'affichage : gardés à part des données, donc propres à chaque appareil
+// (le bon zoom du téléphone n'est pas celui du PC, et il n'est pas écrasé par un import)
+const SKEY = 'tracker-settings';
+let settings = {zoom:100, weeks:53, page:'', range:30, theme:'auto', summary:false, sumSeen:'', compare:false, notesAsc:false};      // zoom en % ; weeks = 26 (6 mois) ou 53 (12 mois)
+try{ Object.assign(settings, JSON.parse(localStorage.getItem(SKEY)||'{}')); }catch(e){}
+if(typeof settings.page !== 'string') settings.page = '';
+if(!['auto','nuit','papier','sepia'].includes(settings.theme)) settings.theme = 'auto';   // page affichée ; range = période des stats (en jours, 0 = tout)
+function saveSettings(){ try{ localStorage.setItem(SKEY, JSON.stringify(settings)); }catch(e){} }
+// À 100 %, une case fait 14 px et l'espace entre deux cases 3 px
+const cellPx = () => +(14*settings.zoom/100).toFixed(1);
+const gapPx  = () => +(3*settings.zoom/100).toFixed(1);
+const weekWidth = () => cellPx() + gapPx();     // largeur d'une colonne (une semaine)
+function applyZoom(){
+  document.documentElement.style.setProperty('--cell', cellPx()+'px');
+  document.documentElement.style.setProperty('--gap', gapPx()+'px');
+}
+function applyTheme(){   // « auto » : aucun attribut, la page suit le mode clair/sombre du téléphone
+  if(settings.theme!=='auto') document.documentElement.dataset.theme = settings.theme;
+  else delete document.documentElement.dataset.theme;
+}
+applyZoom();
+applyTheme();
+
+// Pages : créées dans les Paramètres. 'stats' est la page des statistiques. Sans aucune page, toutes les habitudes s'affichent ensemble.
+// pageOf : la page où s'affiche une habitude (si sa page n'existe plus, elle passe sur la première)
+const pageOf = h => state.pages.some(p => p.id===h.page) ? h.page : (state.pages[0] ? state.pages[0].id : '');
+// curPage : la page actuellement ouverte (valide même après une suppression ou un import)
+function curPage(){
+  const p = settings.page;
+  if(p==='stats' || p==='notes' || p==='archive') return p;
+  return state.pages.some(x => x.id===p) ? p : (state.pages[0] ? state.pages[0].id : '');
+}
+function drawTabs(){   // construit les onglets, met en évidence l'actif, cache « + » sur la page Stats
+  const t = $('#tabs'); t.innerHTML = '';
+  const cur = curPage();
+  const items = (state.pages.length ? state.pages : [{id:'', name:'Habitudes'}]).concat([{id:'stats', name:'Stats'}]);
+  if(hasNotes()) items.push({id:'notes', name:'Notes'});                               // visible seulement s'il y a des notes
+  if(state.habits.some(h => h.archived)) items.push({id:'archive', name:'Archive'});   // visible seulement s'il y a des habitudes en pause
+  items.forEach(p => { const b = mk('button', p.id===cur ? 'on' : '', p.name); b.dataset.p = p.id; t.appendChild(b); });
+  $('#new').style.visibility = ['stats','notes','archive'].includes(cur) ? 'hidden' : 'visible';
+}
+function setPage(p){ settings.page = p; saveSettings(); render(true); window.scrollTo(0,0); }
+
+/* ============================================================
+   MINUTEUR (habitudes en minutes) : les minutes s'ajoutent toutes seules
+   Les minuteurs en cours sont gardés à part : ils continuent même si on ferme la page.
+   ============================================================ */
+const TKEY = 'tracker-timers';
+let timers = {};   // { idHabitude: { start: heure de départ, day: jour de départ } }
+try{ timers = JSON.parse(localStorage.getItem(TKEY)||'{}'); }catch(e){}
+function saveTimers(){ try{ localStorage.setItem(TKEY, JSON.stringify(timers)); }catch(e){} }
+const clock = ms => {   // 754000 → "12:34"
+  const s = Math.floor(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+  return (h ? h+':'+String(m).padStart(2,'0') : m)+':'+String(x).padStart(2,'0');
+};
+function startTimer(h){ timers[h.id] = {start:Date.now(), day:key(new Date())}; saveTimers(); render(); }
+// Durée lisible : 754000 → "12 min 34 s" (ou "1 h 05 min" au-delà d'une heure)
+const dur = ms => {
+  const s = Math.round(ms/1000), h = Math.floor(s/3600), m = Math.floor(s%3600/60);
+  return h ? h+' h '+String(m).padStart(2,'0')+' min' : m+' min '+String(s%60).padStart(2,'0')+' s';
+};
+function stopTimer(h){   // ajoute les minutes écoulées (arrondies) au jour de départ
+  const t = timers[h.id]; if(!t) return null;
+  const ms = Date.now()-t.start, m = Math.round(ms/60000);
+  delete timers[h.id]; saveTimers();
+  if(m>0) setVal(h, t.day, val(h,t.day)+m); else render();
+  return {ms, m};   // durée exacte de la session et minutes ajoutées
+}
+// Mise à jour de l'affichage du temps, chaque seconde
+setInterval(() => {
+  document.querySelectorAll('.tm,.tms').forEach(e => {
+    const t = timers[e.dataset.id]; if(!t) return;
+    e.textContent = (e.classList.contains('tms') ? '■ Arrêter · ' : '● ')+clock(Date.now()-t.start);
+  });
+}, 1000);
+
+
+// Valeur d'une habitude pour un jour donné (0 si rien)
+const val = (h,k) => (state.log[h.id]||{})[k] || 0;
+// Notes : une petite note facultative par habitude et par jour
+const getNote = (h,k) => ((state.notes||{})[h.id]||{})[k] || '';
+const hasNotes = () => Object.values(state.notes||{}).some(o => Object.keys(o).length>0);   // y a-t-il au moins une note ?
+function setNote(h,k,t){
+  state.notes = state.notes || {};
+  const n = state.notes[h.id] = state.notes[h.id] || {};
+  if(t.trim()) n[k] = t; else delete n[k];
+  save();
+}
+// Enregistre une valeur et redessine
+function setVal(h,k,v){
+  v = Math.max(0, Math.round(v*100)/100);
+  const l = state.log[h.id] = state.log[h.id] || {};
+  if(v>0) l[k] = v; else delete l[k];
+  save(); render();
+}
+
+/* ============================================================
+   3. DESSIN D'UNE HABITUDE (titre + boutons + heatmap)
+   ============================================================ */
+function block(h, showMonths, today, start){
+  const tk = key(today);   // tk = date d'aujourd'hui
+  const el = document.createElement('section'); el.className = 'habit';
+  el.innerHTML =
+    '<div class="hd"><button class="nm"></button></div>'+
+    '<div class="map"><div class="days"></div><div class="scroll">'+(showMonths?'<div class="months"></div>':'')+'<div class="grid"></div></div></div>';
+
+  // Titre : toucher le nom ouvre la fenêtre de modification
+  const nm = el.querySelector('.nm'); nm.textContent = h.name; nm.onclick = () => openHabit(h);
+  // Si un minuteur tourne pour cette habitude, on affiche le temps écoulé (toucher ouvre la fenêtre pour l'arrêter)
+  if(timers[h.id]){
+    const tm = mk('button','tm','● '+clock(Date.now()-timers[h.id].start)); tm.dataset.id = h.id;
+    tm.onclick = () => openEntry(h, key(today));
+    el.querySelector('.hd').appendChild(tm);
+  }
+
+
+  // Jours de la semaine à gauche (le décalage aligne avec la grille quand les mois sont affichés)
+  const days = el.querySelector('.days');
+  days.innerHTML = WEEK.map(d => '<span>'+d+'</span>').join('');
+  if(showMonths) days.style.marginTop = '19px';
+
+  // La grille : 53 semaines × 7 jours
+  const g = el.querySelector('.grid'), mo = el.querySelector('.months');
+  let lastMonth = -1;
+  for(let w=0; w<settings.weeks; w++){
+    const first = new Date(start); first.setDate(start.getDate()+w*7);
+    if(mo && first.getMonth()!==lastMonth){            // nouveau mois → on écrit son nom en kanji
+      lastMonth = first.getMonth();
+      const s = document.createElement('span'); s.style.left = (w*weekWidth())+'px'; s.textContent = MONTHS[lastMonth]; mo.appendChild(s);
+    }
+    for(let d=0; d<7; d++){
+      const day = new Date(first); day.setDate(first.getDate()+d);
+      const k = key(day), c = document.createElement('div'), x = day>today ? 0 : val(h,k);
+      c.className = 'c'+(day>today?' future':'')+(x>0?' on':'')+(k===tk?' today':'');
+      if(x>0){
+        // INTENSITÉ : proportion de l'objectif atteinte (de 16 % à 100 % de la couleur pleine)
+        const r = Math.min(1, x/h.goal);
+        c.style.background = 'color-mix(in srgb, '+(h.color||'var(--l4)')+' '+Math.round(16+84*r)+'%, var(--l0))';
+      }
+      c.dataset.k = k; g.appendChild(c);
+    }
+  }
+  // Toucher une case ouvre la fenêtre de ce jour (valider, ou saisir la quantité)
+  g.addEventListener('click', e => {
+    const k = e.target.dataset && e.target.dataset.k;
+    if(!k || e.target.classList.contains('future')) return;
+    openEntry(h, k);
+  });
+  return el;
+}
+
+/* ============================================================
+   4. AFFICHAGE DE TOUTES LES HABITUDES
+   ============================================================ */
+let syncing = false;
+function render(first){
+  const old = document.querySelector('.scroll'), x = old ? old.scrollLeft : 0;   // on retient la position du défilement
+  const box = $('#habits'); box.innerHTML = '';
+  drawTabs();
+  const cur = curPage();
+  if(cur === 'notes'){ drawNotes(box); return; }
+  if(cur === 'archive'){ drawArchive(box); return; }
+  if(cur === 'stats'){ drawStats(box); return; }                      // page Stats : dessin à part
+  // Résumé de la semaine : seulement si activé dans les Paramètres, le lundi, et une seule fois par jour
+  if(settings.summary && new Date().getDay()===1 && settings.sumSeen!==key(new Date())){ const w = weekCard(); if(w) box.appendChild(w); }
+  const live = state.habits.filter(h => !h.archived);   // les habitudes en pause ne s'affichent pas
+  const list = state.pages.length ? live.filter(h => pageOf(h) === cur) : live;            // seulement les habitudes de la page courante
+  if(!list.length){ box.innerHTML = '<div class="empty">Aucune habitude sur cette page.<br>Touche « + » en bas pour en ajouter une.</div>'; return; }
+  const today = new Date(); today.setHours(0,0,0,0);
+  // Début de la grille : le lundi d'il y a (nombre de semaines − 1) semaines
+  const start = new Date(today); start.setDate(today.getDate() - ((today.getDay()+6)%7) - (settings.weeks-1)*7);
+  list.forEach((h,i) => box.appendChild(block(h, i===0, today, start)));
+  // Toutes les heatmaps défilent ensemble ; au premier affichage on va à la fin (aujourd'hui)
+  const sc = [...document.querySelectorAll('.scroll')];
+  sc.forEach(s => {
+    s.scrollLeft = first ? 1e5 : x;
+    s.addEventListener('scroll', () => {
+      if(syncing) return; syncing = true;
+      sc.forEach(o => { if(o!==s) o.scrollLeft = s.scrollLeft; });
+      requestAnimationFrame(() => syncing = false);
+    });
+  });
+}
+
+/* ============================================================
+   5. FENÊTRES : création / modification, puis données
+   ============================================================ */
+/* ============================================================
+   PAGE STATS : jours actifs, objectifs atteints et totaux sur une période
+   ============================================================ */
+const RANGES = [[7,'7 jours'],[30,'30 jours'],[90,'90 jours'],[-1,'Ce mois'],[365,'12 mois'],[0,'Tout']];
+// Total affiché : les minutes deviennent « 12 h 05 », le reste garde son unité
+function fmtTotal(h, t){
+  if(h.unit==='min'){ const m = Math.round(t); return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0'); }
+  return fmt(t)+(h.unit?' '+h.unit:'');
+}
+// Petit outil pour créer un élément : mk('div', 'classe', 'texte')
+function mk(tag, cls, text){ const e = document.createElement(tag); if(cls) e.className = cls; if(text!==undefined) e.textContent = text; return e; }
+// Couleur d'une habitude dans les graphiques (si elle n'en a pas choisi, on prend une couleur de la palette)
+const PAL = ['#8fbf9f','#7fa8d6','#e08a7a','#e0b265','#a994d6','#d98fb0','#6fc3c3','#c4c27a'];
+const hcol = (h,i) => h.color || PAL[i % PAL.length];
+// Chiffres d'une période [a, b] (textes "AAAA-MM-JJ") : jours actifs, habitudes faites, objectifs atteints, minutes
+function periodStats(a, b){
+  const e = [];
+  state.habits.forEach(h => { const l = state.log[h.id]||{}; for(const k in l){ if(k>=a && k<=b && l[k]>0) e.push({h,k,v:l[k]}); } });
+  return {act:new Set(e.map(x => x.k)).size, n:e.length, ok:e.filter(x => x.v>=x.h.goal).length, min:e.filter(x => x.h.unit==='min').reduce((s,x) => s+x.v, 0)};
+}
+// Une « carte » de chiffre clé
+function card(label, value){ const c = mk('div','card'); c.append(mk('b','',value), mk('span','',label)); return c; }
+// Un bloc de graphique : titre + dessin SVG + petite note
+function chart(title, svg, note){
+  const s = mk('section','ch'); s.appendChild(mk('h4','',title));
+  const d = mk('div'); d.innerHTML = svg; s.appendChild(d);
+  if(note) s.appendChild(mk('p','',note));
+  return s;
+}
+// Camembert (anneau) : chaque part est un arc de cercle dessiné avec stroke-dasharray
+function donut(items){
+  const tot = items.reduce((s,x) => s+x.value, 0), C = 2*Math.PI*40;
+  let off = 0, s = '<svg viewBox="0 0 100 100" class="donut">';
+  items.forEach(x => {
+    const len = x.value/tot*C;
+    s += '<circle cx="50" cy="50" r="40" fill="none" stroke-width="16" transform="rotate(-90 50 50)" style="stroke:'+x.color+'" stroke-dasharray="'+len.toFixed(2)+' '+(C-len).toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+'"/>';
+    off += len;
+  });
+  return s+'</svg>';
+}
+// Histogramme : vals = hauteurs, labels = étiquettes (ou null), hi = barre mise en avant
+function bars(vals, labels, hi){
+  const W = 300, H = labels ? 110 : 96, B = 80, n = vals.length, g = n>14 ? 2 : 8, bw = (W-g*(n-1))/n, max = Math.max(1,...vals);
+  let s = '<svg viewBox="0 0 '+W+' '+H+'" class="bars">';
+  vals.forEach((v,i) => {
+    const h = v ? Math.max(3, v/max*B) : 1, x = (i*(bw+g)).toFixed(1);
+    s += '<rect x="'+x+'" y="'+(B-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+h.toFixed(1)+'" rx="2" style="fill:'+(v?'var(--l4)':'var(--edge)')+';opacity:'+(i===hi?1:.5)+'"/>';
+    if(labels) s += '<text x="'+(+x+bw/2).toFixed(1)+'" y="'+(H-6)+'" text-anchor="middle" style="fill:var(--dim);font-size:11px">'+labels[i]+'</text>';
+  });
+  return s+'</svg>';
+}
+
+function drawStats(box){
+  const today = new Date(); today.setHours(0,0,0,0);
+  let days = settings.range;
+  if(days<0) days = today.getDate();   // « Ce mois » : du 1er du mois à aujourd'hui
+  if(!days){   // « Tout » : depuis la toute première saisie
+    let first = today;
+    state.habits.forEach(h => { for(const k in (state.log[h.id]||{})){ const d = new Date(k+'T00:00:00'); if(d<first) first = d; } });
+    days = Math.max(1, Math.round((today-first)/864e5)+1);
+  }
+  const from = new Date(today); from.setDate(today.getDate()-days+1);
+  const fk = key(from), tk = key(today);   // les textes "AAAA-MM-JJ" se comparent comme des dates
+  // Choix de la période
+  const seg = mk('div','seg');
+  RANGES.forEach(([d,l]) => {
+    const b = mk('button','btn'+(d===settings.range?' on':''), l);
+    b.onclick = () => { settings.range = d; saveSettings(); render(); };
+    seg.appendChild(b);
+  });
+  box.appendChild(seg);
+  if(settings.range!==0){   // bouton de comparaison (absent pour « Tout » : il n'y a rien avant)
+    const cb = mk('button','btn'+(settings.compare?' on':''), settings.range<0 ? 'Comparer avec le mois dernier' : 'Comparer avec la période précédente');
+    cb.onclick = () => { settings.compare = !settings.compare; saveSettings(); render(); };
+    box.appendChild(cb);
+  }
+  if(!state.habits.length){ box.appendChild(mk('div','empty','Rien à afficher pour l’instant.')); return; }
+
+  // Les données de la période : une entrée = une habitude un jour donné (avec une valeur > 0)
+  const ent = [];
+  state.habits.forEach((h,i) => { const l = state.log[h.id]||{}; for(const k in l){ if(k>=fk && k<=tk && l[k]>0) ent.push({h,i,k,v:l[k]}); } });
+  const reached = ent.filter(e => e.v>=e.h.goal).length;
+  const mins = ent.filter(e => e.h.unit==='min').reduce((s,e) => s+e.v, 0);
+
+  // 1. Chiffres clés
+  const cards = mk('div','cards');
+  cards.append(card('jours actifs', new Set(ent.map(e => e.k)).size+' / '+days), card('habitudes faites', String(ent.length)),
+    card('objectifs atteints', ent.length ? Math.round(reached/ent.length*100)+' %' : '–'));
+  if(mins>0) cards.appendChild(card('temps total', fmtTotal({unit:'min'}, mins)));
+  box.appendChild(cards);
+
+  // 1b. Comparaison avec la période d'avant : des chiffres neutres, juste une différence (+ ou −), sans jugement
+  if(settings.compare && settings.range!==0){
+    let pf = new Date(from); pf.setDate(from.getDate()-days);                          // période juste avant, même durée
+    if(settings.range<0) pf = new Date(today.getFullYear(), today.getMonth()-1, 1);    // « Ce mois » : on compare au début du mois dernier
+    const pt = new Date(pf); pt.setDate(pf.getDate()+days-1);
+    const cur = periodStats(fk, tk), prev = periodStats(key(pf), key(pt));
+    const cmp = mk('section','ch');
+    cmp.append(mk('h4','','Comparaison'), mk('p','',(settings.range<0 ? 'Ce mois-ci contre le mois dernier' : 'Cette période contre la précédente')+', sur le même nombre de jours.'));
+    const lines = [['jours actifs', cur.act, prev.act, String], ['habitudes faites', cur.n, prev.n, String], ['objectifs atteints', cur.ok, prev.ok, String]];
+    if(cur.min || prev.min) lines.push(['temps', cur.min, prev.min, m => fmtTotal({unit:'min'}, m)]);
+    lines.forEach(([lab, a, b, f]) => {
+      const mx = Math.max(a, b, 1), r = mk('div','cmp'), hd = mk('div','sth');
+      hd.append(mk('b','',lab), mk('span','', a===b ? '=' : (a>b ? '+' : '−')+f(Math.abs(a-b))));
+      r.appendChild(hd);
+      [['Avant', b, .45], ['Actuel', a, 1]].forEach(([t, v, op]) => {
+        const tr = mk('div','stbar'), i = mk('i');
+        i.style.width = Math.round(v/mx*100)+'%'; i.style.background = 'var(--l4)'; i.style.opacity = op; tr.appendChild(i);
+        const w = mk('div','cb'); w.append(mk('span','',t), tr, mk('span','',f(v))); r.appendChild(w);
+      });
+      cmp.appendChild(r);
+    });
+    box.appendChild(cmp);
+  }
+
+  // 2. Camemberts (temps par habitude, puis répartition des jours actifs)
+  const byH = state.habits.map((h,i) => {
+    const e = ent.filter(x => x.h===h);
+    return {h, col:hcol(h,i), n:e.length, ok:e.filter(x => x.v>=h.goal).length, t:e.reduce((s,x) => s+x.v, 0)};
+  });
+  const pie = (title, items) => {
+    items = items.filter(x => x.value>0);
+    if(!items.length) return;
+    const wrap = mk('div','dn'), sv = mk('div'), lg = mk('div','lg');
+    sv.innerHTML = donut(items);
+    items.forEach(x => {
+      const r = mk('div'), d = mk('i'); d.style.background = x.color;
+      r.append(d, document.createTextNode(x.label), mk('em','',x.text)); lg.appendChild(r);
+    });
+    wrap.append(sv.firstChild, lg);
+    const s = mk('section','ch'); s.append(mk('h4','',title), wrap); box.appendChild(s);
+  };
+  pie('Temps par habitude', byH.filter(x => x.h.unit==='min').map(x => ({label:x.h.name, value:x.t, color:x.col, text:fmtTotal(x.h,x.t)})));
+  pie('Répartition des jours actifs', byH.map(x => ({label:x.h.name, value:x.n, color:x.col, text:x.n+' j'})));
+
+  if(ent.length){
+    // 3. Par jour de la semaine (lundi en premier)
+    const wd = [0,0,0,0,0,0,0];
+    ent.forEach(e => { wd[(new Date(e.k+'T00:00:00').getDay()+6)%7]++; });
+    const best = wd.indexOf(Math.max(...wd));
+    box.appendChild(chart('Par jour de la semaine', bars(wd, WEEK, best), 'Jour le plus actif : '+['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'][best]));
+    // 4. Dans le temps : la période est coupée en 30 tranches au maximum
+    const size = Math.max(1, Math.ceil(days/30)), nb = Math.ceil(days/size), bk = new Array(nb).fill(0);
+    ent.forEach(e => { const i = Math.floor(Math.round((new Date(e.k+'T00:00:00')-from)/864e5)/size); if(i>=0 && i<nb) bk[i]++; });
+    box.appendChild(chart('Activité dans le temps', bars(bk, null, bk.indexOf(Math.max(...bk))),
+      (size===1 ? 'Par jour' : 'Par tranche de '+size+' jours')+' · depuis le '+from.toLocaleDateString('fr-FR',{day:'numeric',month:'long'})));
+  }
+
+  // 5. Détail par habitude (groupé par page s'il y en a)
+  const groups = state.pages.length ? state.pages.map(p => [p.name, byH.filter(x => pageOf(x.h)===p.id)]) : [['Détail', byH]];
+  groups.forEach(([name, part]) => {
+    if(!part.length) return;
+    box.appendChild(mk('div','sgrp',name));
+    part.forEach(x => {
+      const h = x.h, binary = h.goal<=1 && !h.unit;   // case à cocher : on compte les fois, pas un total
+      const e = mk('div','st'), hd = mk('div','sth');
+      hd.append(mk('b','',h.name), mk('span','', binary ? x.n+' fois' : fmtTotal(h,x.t)));
+      const bar = mk('div','stbar'), fill = mk('i');   // barre : part des jours actifs sur la période
+      fill.style.width = Math.round(x.n/days*100)+'%'; fill.style.background = x.col;
+      bar.appendChild(fill);
+      e.append(hd, bar, mk('div','sts', binary ? 'sur '+days+' jours' : x.n+' jours actifs sur '+days+' · objectif atteint '+x.ok+' fois'+(x.n ? ' · moy. '+fmtTotal(h,x.t/x.n)+' par jour actif' : '')));
+      box.appendChild(e);
+    });
+  });
+}
+
+/* ============================================================
+   NOTES, ARCHIVE ET RÉSUMÉ DE LA SEMAINE
+   ============================================================ */
+// Page Notes : toutes les notes, de la plus récente à la plus ancienne, avec une recherche
+function drawNotes(box){
+  const all = [];
+  state.habits.forEach((h,i) => { const n = (state.notes||{})[h.id] || {}; for(const k in n) all.push({h,i,k,t:n[k]}); });
+  if(!all.length){ box.appendChild(mk('div','empty','Aucune note pour l’instant.')); return; }
+  const q = document.createElement('input'), out = mk('div'), top = mk('div','nbar');
+  q.className = 'search'; q.placeholder = 'Rechercher (texte ou date : 14/10/2026, 10/2026…)';
+  const ord = mk('button','btn','');   // bouton pour inverser l'ordre des dates
+  ord.onclick = () => { settings.notesAsc = !settings.notesAsc; saveSettings(); show(); };
+  top.append(q, ord); box.append(top, out);
+  const dateStr = k => k.slice(8,10)+'/'+k.slice(5,7)+'/'+k.slice(0,4);   // "2026-10-14" → "14/10/2026"
+  const show = () => {
+    out.innerHTML = '';
+    ord.textContent = settings.notesAsc ? '↑ Anciennes' : '↓ Récentes';
+    const f = q.value.trim().toLowerCase(), fd = f.replace(/[\s.\-]+/g,'/');   // « 14 10 2026 » ou « 14-10 » marchent aussi
+    const dates = [...new Set(all.map(x => x.k))].sort();
+    if(!settings.notesAsc) dates.reverse();
+    dates.forEach(k => {
+      // On garde les notes de ce jour qui correspondent à la recherche (date, texte ou nom de l'habitude)
+      const list = all.filter(x => x.k===k && (!f || dateStr(k).includes(fd) || x.t.toLowerCase().includes(f) || x.h.name.toLowerCase().includes(f)));
+      if(!list.length) return;
+      const e = mk('div','nt');
+      e.appendChild(mk('div','ntd',dateStr(k)));   // le titre de chaque groupe de notes : sa date
+      list.forEach(x => {
+        const r = mk('div','nr'), d = mk('i'), hd = mk('div','nth');
+        d.style.background = hcol(x.h, x.i);
+        hd.append(d, mk('span','',x.h.name));
+        r.append(hd, mk('p','',x.t));
+        r.onclick = () => openEntry(x.h, x.k);   // toucher une note ouvre ce jour pour la modifier
+        e.appendChild(r);
+      });
+      out.appendChild(e);
+    });
+    if(!out.children.length) out.appendChild(mk('div','empty','Aucun résultat.'));
+  };
+  show();
+  q.oninput = show;
+}
+
+// Page Archive : les habitudes en pause (historique conservé). On peut les réactiver ou les supprimer.
+function drawArchive(box){
+  const list = state.habits.filter(h => h.archived);
+  if(!list.length){ box.appendChild(mk('div','empty','Aucune habitude en pause.')); return; }
+  box.appendChild(mk('p','hint','Les habitudes en pause n’apparaissent plus sur les pages, mais leur historique est conservé (et compté dans les stats).'));
+  list.forEach(h => {
+    const n = Object.keys(state.log[h.id]||{}).length, row = mk('div','arow'), t = mk('div','at');
+    t.append(mk('b','',h.name), mk('span','',n+' jour'+(n>1?'s':'')+' enregistré'+(n>1?'s':'')));
+    const re = mk('button','btn','Réactiver'), del = mk('button','btn','Supprimer');
+    re.onclick = () => { delete h.archived; save(); render(); };
+    del.onclick = () => {
+      if(!confirm('Supprimer « '+h.name+' » et tout son historique ?')) return;
+      state.habits = state.habits.filter(x => x.id!==h.id); delete state.log[h.id]; if(state.notes) delete state.notes[h.id];
+      save(); render();
+    };
+    row.append(t, re, del); box.appendChild(row);
+  });
+}
+
+// Résumé de la semaine passée (lundi → dimanche), affiché en haut le lundi si l'option est activée
+function weekCard(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const to = new Date(today); to.setDate(today.getDate()-1);
+  const from = new Date(today); from.setDate(today.getDate()-7);
+  const fk = key(from), tk = key(to);
+  let n = 0, mins = 0, best = null; const days = new Set();
+  state.habits.filter(h => !h.archived).forEach(h => {
+    let c = 0; const l = state.log[h.id] || {};
+    for(const k in l){ if(k>=fk && k<=tk && l[k]>0){ n++; c++; days.add(k); if(h.unit==='min') mins += l[k]; } }
+    if(c && (!best || c>best.c)) best = {h,c};
+  });
+  if(!n) return null;   // rien à résumer : on n'affiche rien
+  const c = mk('section','wk');
+  c.appendChild(mk('h4','','Semaine dernière'));
+  const s = d => d>1 ? 's' : '';
+  const lines = [days.size+' jour'+s(days.size)+' actif'+s(days.size)+' sur 7', n+' habitude'+s(n)+' faite'+s(n)];
+  if(mins>0) lines.push(fmtTotal({unit:'min'}, mins)+' de temps enregistré');
+  if(best) lines.push('Le plus régulier : '+best.h.name+' ('+best.c+' j)');
+  lines.forEach(t => c.appendChild(mk('p','',t)));
+  const x = mk('button','btn','Fermer');
+  x.onclick = () => { settings.sumSeen = key(today); saveSettings(); render(); };
+  c.appendChild(x);
+  return c;
+}
+
+function sheet(html){ $('#sheet').innerHTML = html; $('#ov').hidden = false; }
+function close(){ $('#ov').hidden = true; }
+
+// Fenêtre d'un jour : on y voit la date précise, puis on valide ou on saisit la quantité.
+// Chaque appui est enregistré tout de suite ; « OK » ferme simplement la fenêtre.
+function openEntry(h, k){
+  const date = new Date(k+'T00:00:00').toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});
+  const toggle = h.goal <= 1;   // objectif de 1 → fait / pas fait ; sinon une quantité
+  sheet('<h3></h3><div class="entry">'+(toggle
+      ? '<button class="btn" id="tg"></button>'
+      : '<button class="sq" id="mi" aria-label="Moins">−</button><div class="big" id="bv"></div><button class="sq" id="pl" aria-label="Plus">+</button>')+
+    '</div><div class="tmr" id="tmr"></div><details class="note"><summary id="ns">Note</summary><textarea id="nt" placeholder="Une note pour ce jour…"></textarea></details>'+
+    '<div class="acts"><button class="btn main" id="no">OK</button>'+(toggle?'':'<button class="btn" id="zr">Remettre à 0</button>')+'</div>');
+  $('#sheet h3').textContent = h.name+' · '+date;
+  // show() met à jour ce qui est affiché dans la fenêtre
+  const show = () => {
+    if(toggle){
+      const on = val(h,k) >= h.goal;
+      $('#tg').textContent = on ? '✓ Fait' : 'Pas fait';
+      $('#tg').className = 'btn tg'+(on?' on':'');
+    }else{
+      $('#bv').textContent = fmt(val(h,k))+' / '+fmt(h.goal)+(h.unit?' '+h.unit:'');
+    }
+  };
+  if(toggle){
+    $('#tg').onclick = () => { setVal(h,k, val(h,k)>=h.goal ? 0 : h.goal); show(); };
+  }else{
+    const add = d => { setVal(h,k,val(h,k)+d); show(); };
+    $('#mi').onclick = () => add(-h.step);
+    $('#pl').onclick = () => add(h.step);
+    $('#zr').onclick = () => { setVal(h,k,0); show(); };
+  }
+  $('#no').onclick = close;
+  show();
+  // Minuteur : seulement pour les habitudes en minutes, et seulement pour aujourd'hui
+  if(h.unit==='min' && k===key(new Date())){
+    let last = '';   // message affiché après un arrêt du minuteur
+    const run = () => {
+      const t = timers[h.id], tmr = $('#tmr');
+      tmr.innerHTML = '';
+      const b = mk('button','btn tg'+(t?' on tms':''), t ? '■ Arrêter · '+clock(Date.now()-t.start) : '▶ Démarrer le minuteur');
+      b.dataset.id = h.id;
+      b.onclick = () => {
+        if(t){
+          const r = stopTimer(h);   // on arrête : r = durée de la session
+          last = r && r.m>0 ? 'Session terminée : '+dur(r.ms)+' · +'+r.m+' min ajoutées à la journée' : 'Session trop courte (moins de 30 s) : rien d’ajouté';
+          show();
+        }else{ last = ''; startTimer(h); }
+        run();
+      };
+      tmr.appendChild(b);
+      if(last && !t){ const p = mk('p','hint',last); p.style.margin = '12px 0 0'; tmr.appendChild(p); }   // résultat de la dernière session
+    };
+    run();
+  }
+  // Note du jour (cachée tant qu'on ne déplie pas) : enregistrée à chaque frappe
+  const nt = $('#nt'), ns = $('#ns');
+  nt.value = getNote(h,k);
+  const mark = () => { ns.textContent = nt.value.trim() ? 'Note ·' : 'Note'; };   // le « · » indique qu'une note existe
+  nt.oninput = () => { setNote(h,k,nt.value); mark(); };
+  mark();
+}
+
+function openHabit(h){
+  const n = !h;   // vrai = on crée une nouvelle habitude
+  sheet('<h3>'+(n?'Nouvelle habitude':'Modifier l’habitude')+'</h3>'+
+    '<div class="f"><div><label>Nom</label><input id="fn"></div>'+
+    '<div><label>Objectif</label><input id="fg" inputmode="decimal"></div>'+
+    '<div><label>Unité</label><input id="fu" placeholder="L, pages, min…"></div>'+
+    '<div><label>Pas du + / −</label><input id="fs" inputmode="decimal"></div></div>'+
+    '<div id="pgw"></div>'+
+    '<div style="margin-top:16px"><label>Couleur</label><div class="sw" id="sw"><label class="pickbox" id="cpb" title="Choisir n’importe quelle couleur"><input type="color" id="cp" value="#8fbf9f"></label></div></div>'+
+    '<div class="acts"><button class="btn main" id="ok">Enregistrer</button><button class="btn" id="no">Annuler</button>'+
+    (n?'':'<button class="btn" id="up" aria-label="Monter">↑</button><button class="btn" id="dn" aria-label="Descendre">↓</button><button class="btn" id="ar">Mettre en pause</button><button class="btn del" id="rm">Supprimer</button>')+'</div>');
+  $('#fn').value = n?'':h.name; $('#fg').value = n?'1':fmt(h.goal); $('#fu').value = n?'':h.unit; $('#fs').value = n?'1':fmt(h.step);
+  // Choix de la couleur : la première pastille (couleur du thème) est le choix par défaut
+  let color = n ? '' : (h.color||'');
+  const sw = $('#sw');
+  // Choix de la page de l'habitude (seulement s'il existe des pages)
+  let page = n ? curPage() : pageOf(h);
+  if(state.pages.length){
+    const pgw = $('#pgw'), pg = mk('div','seg');
+    pgw.style.marginTop = '14px'; pg.style.marginBottom = '0';
+    pgw.appendChild(mk('label','','Page'));
+    const showPage = () => [...pg.children].forEach(b => b.className = 'btn'+(b.dataset.p===page?' on':''));
+    state.pages.forEach(p => {
+      const b = mk('button','btn',p.name); b.dataset.p = p.id;
+      b.onclick = () => { page = p.id; showPage(); };
+      pg.appendChild(b);
+    });
+    pgw.appendChild(pg); showPage();
+  }
+  // Couleur : pastilles prêtes à l'emploi + la pastille « spectre » pour choisir n'importe quelle couleur
+  const pick = $('#cp'), pickBox = $('#cpb');
+  const PRESETS = ['', '#8fbf9f', '#7fa8d6', '#e08a7a', '#e0b265', '#a994d6', '#d98fb0'];
+  const marks = () => {   // met en évidence le choix courant
+    [...sw.querySelectorAll('button')].forEach(b => b.className = (b.dataset.c||'')===color ? 'on' : '');
+    pickBox.className = 'pickbox'+(color && !PRESETS.includes(color) ? ' on' : '');
+  };
+  PRESETS.forEach(c => {
+    const b = document.createElement('button');
+    b.dataset.c = c; b.style.background = c || 'var(--l4)'; b.setAttribute('aria-label','Couleur');
+    b.onclick = () => { color = c; marks(); };
+    sw.insertBefore(b, pickBox);
+  });
+  if(color && !PRESETS.includes(color)){ pick.value = color; pickBox.style.background = color; }   // couleur personnalisée déjà choisie
+  pick.oninput = () => { color = pick.value; pickBox.style.background = color; marks(); };
+  marks();
+  $('#no').onclick = close;
+  $('#ok').onclick = () => {
+    const name = $('#fn').value.trim(); if(!name){ $('#fn').focus(); return; }
+    const o = {name, goal:num($('#fg').value,1), unit:$('#fu').value.trim(), step:num($('#fs').value,1), color, page};
+    if(n) state.habits.push({id:'h'+Date.now(), ...o}); else Object.assign(h,o);
+    settings.page = page; saveSettings();   // on affiche la page de l'habitude
+    save(); close(); render(true);
+  };
+  if(!n){
+    // Monter / descendre l'habitude dans la liste
+    const move = d => {
+      const i = state.habits.indexOf(h);
+      let j = i+d;
+      while(j>=0 && j<state.habits.length && state.habits[j].page!==h.page) j += d;   // saute les habitudes des autres pages
+      if(j<0 || j>=state.habits.length) return;
+      [state.habits[i], state.habits[j]] = [state.habits[j], state.habits[i]];
+      save(); render();
+    };
+    $('#up').onclick = () => move(-1); $('#dn').onclick = () => move(1);
+    // Pause : l'habitude disparaît des pages mais son historique reste (onglet Archive pour la réactiver)
+    $('#ar').onclick = () => { h.archived = true; save(); close(); render(); };
+    $('#rm').onclick = () => {
+      if(!confirm('Supprimer « '+h.name+' » et tout son historique ?')) return;
+      state.habits = state.habits.filter(x => x.id!==h.id); delete state.log[h.id]; if(state.notes) delete state.notes[h.id];
+      save(); close(); render();
+    };
+  }
+  if(n) $('#fn').focus();
+}
+
+// Fenêtre des paramètres : sauvegarde (fichier), données visibles en JSON, et remise à zéro
+function openData(){
+  sheet('<h3>Paramètres</h3>'+
+    '<div class="sec"><h4>Affichage</h4><p>Ces réglages sont propres à cet appareil.</p>'+
+    '<label>Thème</label><div class="seg" id="th"></div>'+
+    '<label>Résumé de la semaine, affiché le lundi</label><div class="seg" id="sm"></div>'+
+    '<label>Période affichée</label><div class="seg"><button class="btn" id="w26">6 mois</button><button class="btn" id="w53">12 mois</button></div>'+
+    '<div class="zr"><input type="range" id="zm" min="40" max="300" step="5"><span id="zv"></span></div>'+
+    '<div class="acts" style="margin-top:12px"><button class="btn" id="fit">Ajuster à l’écran</button></div></div>'+
+    '<div class="sec"><h4>Pages</h4><p>Crée autant de pages que tu veux pour ranger tes habitudes. Sans page, tout s’affiche ensemble.</p><div id="pl"></div><div class="acts" style="margin-top:12px"><input id="pn" placeholder="Nom de la page" maxlength="24"><button class="btn" id="pa">Ajouter</button></div></div>'+
+    '<div class="sec"><h4>Sauvegarde</h4><p>Exporte un fichier .json pour garder tes données, ou importe-en un pour les restaurer (par exemple sur un autre appareil). L’import remplace les données actuelles.</p>'+
+    '<div class="acts"><button class="btn main" id="ex">Exporter un fichier</button><button class="btn" id="im">Importer un fichier</button><button class="btn" id="csv">Exporter en CSV</button></div></div>'+
+    '<div class="sec"><h4>Données (JSON)</h4><p>Voici le contenu exact de tes données. Tu peux le copier, ou coller ici un texte sauvegardé puis l’importer.</p>'+
+    '<textarea id="dt" spellcheck="false"></textarea>'+
+    '<div class="acts" style="margin-top:10px"><button class="btn" id="cp">Copier</button><button class="btn" id="imt">Importer ce texte</button></div></div>'+
+    '<div id="msg"></div>'+
+    '<div class="sec"><h4>Zone sensible</h4><div class="acts"><button class="btn" id="cl">Tout effacer</button></div></div>'+
+    '<div class="acts"><button class="btn main" id="no">Fermer</button></div>');
+  $('#dt').value = JSON.stringify(state, null, 2);   // null, 2 = texte indenté, lisible
+  // Affichage : période (26 ou 53 semaines) et zoom (curseur). Chaque changement est appliqué tout de suite.
+  const zm = $('#zm'), zv = $('#zv');
+  const sync = () => {
+    zm.value = settings.zoom; zv.textContent = settings.zoom+' %';
+    $('#w26').className = 'btn'+(settings.weeks===26?' on':'');
+    $('#w53').className = 'btn'+(settings.weeks===53?' on':'');
+  };
+  const apply = () => { applyZoom(); saveSettings(); sync(); render(true); };
+  $('#w26').onclick = () => { settings.weeks = 26; apply(); };
+  $('#w53').onclick = () => { settings.weeks = 53; apply(); };
+  zm.oninput = () => { settings.zoom = +zm.value; apply(); };
+  // « Ajuster à l'écran » : calcule le zoom pour que toute la période tienne dans la largeur (17 px = case + espace à 100 %)
+  $('#fit').onclick = () => {
+    const sc = document.querySelector('.scroll');
+    const avail = (sc ? sc.clientWidth : $('#habits').clientWidth - 24) - 6;
+    settings.zoom = Math.max(40, Math.min(300, Math.floor(avail/(settings.weeks*17)*100)));
+    apply();
+  };
+  sync();
+  // Thème : Auto (suit le téléphone), Nuit, Papier, Sépia — appliqué tout de suite
+  const th = $('#th');
+  [['auto','Auto'],['nuit','Nuit'],['papier','Papier'],['sepia','Sépia']].forEach(([id,l]) => {
+    const b = mk('button','btn'+(settings.theme===id?' on':''), l);
+    b.onclick = () => { settings.theme = id; applyTheme(); saveSettings(); [...th.children].forEach(x => x.className = 'btn'); b.className = 'btn on'; };
+    th.appendChild(b);
+  });
+  // Résumé de la semaine : désactivé par défaut (si tu l'actives un lundi, il s'affiche tout de suite)
+  const sm = $('#sm');
+  [[false,'Non'],[true,'Oui']].forEach(([v,l]) => {
+    const b = mk('button','btn'+(settings.summary===v?' on':''), l);
+    b.onclick = () => { settings.summary = v; settings.sumSeen = ''; saveSettings(); [...sm.children].forEach(x => x.className = 'btn'); b.className = 'btn on'; render(); };
+    sm.appendChild(b);
+  });
+  // Pages : liste modifiable (renommer, monter, descendre, supprimer) + ajout
+  const pl = $('#pl');
+  const drawPages = () => {
+    pl.innerHTML = '';
+    if(!state.pages.length) pl.appendChild(mk('p','','Aucune page pour l’instant.'));
+    state.pages.forEach((p,i) => {
+      const row = mk('div','prow'), inp = document.createElement('input');
+      inp.value = p.name; inp.maxLength = 24;
+      inp.onchange = () => { p.name = inp.value.trim() || p.name; save(); render(); };
+      const mv = (d,t) => {
+        const b = mk('button','btn',t);
+        b.onclick = () => { const j = i+d; if(j<0 || j>=state.pages.length) return; [state.pages[i],state.pages[j]] = [state.pages[j],state.pages[i]]; save(); render(); drawPages(); };
+        return b;
+      };
+      const del = mk('button','btn','×');
+      del.onclick = () => {
+        if(!confirm('Supprimer la page « '+p.name+' » ? Ses habitudes passent sur la première page.')) return;
+        state.pages.splice(i,1); save(); render(); drawPages();
+      };
+      row.append(inp, mv(-1,'↑'), mv(1,'↓'), del); pl.appendChild(row);
+    });
+    $('#dt').value = JSON.stringify(state, null, 2);   // met à jour le texte JSON affiché plus bas
+  };
+  $('#pa').onclick = () => {
+    const v = $('#pn').value.trim(); if(!v) return;
+    state.pages.push({id:'p'+Date.now(), name:v}); $('#pn').value = ''; save(); render(); drawPages();
+  };
+  drawPages();
+  $('#no').onclick = close;
+  $('#ex').onclick = exportData;
+  $('#csv').onclick = exportCSV;
+  $('#im').onclick = () => $('#file').click();      // ouvre le choix de fichier
+  $('#imt').onclick = () => applyImport($('#dt').value);
+  $('#cp').onclick = () => {
+    const t = $('#dt'); t.select(); let ok = false;
+    try{ ok = document.execCommand('copy'); }catch(e){}
+    $('#msg').textContent = ok ? 'Texte copié.' : 'Texte sélectionné : copie-le à la main.';
+  };
+  $('#cl').onclick = () => {
+    if(!confirm('Tout effacer, habitudes et historique ?')) return;
+    state = {habits:[], log:{}, pages:[], notes:{}}; save(); close(); render(true);
+  };
+}
+
+// Export : crée un fichier .json et le télécharge
+function exportData(){
+  try{
+    const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'tracker-'+key(new Date())+'.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('#msg').textContent = 'Fichier exporté.';
+  }catch(e){ $('#msg').textContent = 'Export impossible ici : copie plutôt le texte ci-dessous.'; }
+}
+// Export CSV : une ligne par habitude et par jour (valeur et/ou note), pour ouvrir dans un tableur.
+// Séparateur « ; » et virgule décimale (réglage français d'Excel) ; le \ufeff au début aide Excel à lire les accents.
+function exportCSV(){
+  const q = s => '"'+String(s).replace(/"/g,'""')+'"';   // entoure de guillemets pour que le texte ne casse pas les colonnes
+  const rows = [['page','habitude','unité','objectif','date','valeur','note','en pause'].map(q).join(';')];
+  state.habits.forEach(h => {
+    const l = state.log[h.id] || {}, n = (state.notes||{})[h.id] || {};
+    const pg = (state.pages.find(p => p.id===pageOf(h)) || {}).name || '';
+    Object.keys(Object.assign({}, l, n)).sort().forEach(k => {
+      rows.push([pg, h.name, h.unit, fmt(h.goal), k, fmt(l[k]||0), n[k]||'', h.archived ? 'oui' : ''].map(q).join(';'));
+    });
+  });
+  try{
+    const blob = new Blob(['\ufeff'+rows.join('\r\n')], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = 'tracker-'+key(new Date())+'.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    $('#msg').textContent = 'Fichier CSV exporté.';
+  }catch(e){ $('#msg').textContent = 'Export impossible ici.'; }
+}
+// Import : remplace les données actuelles par celles du texte (après confirmation)
+function applyImport(text){
+  try{
+    const o = clean(JSON.parse(text)); if(!o) throw 0;
+    if(!confirm('Remplacer les données actuelles ?')) return;
+    state = o; save(); close(); render(true);
+  }catch(e){ $('#msg').textContent = 'Fichier ou texte invalide.'; }
+}
+// Quand un fichier est choisi, on le lit puis on l'importe
+$('#file').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader(); r.onload = () => applyImport(r.result); r.readAsText(f);
+  e.target.value = '';
+});
+
+/* ============================================================
+   6. DÉMARRAGE
+   ============================================================ */
+$('#new').onclick = () => openHabit(null);
+// Toucher un onglet change de page
+$('#tabs').addEventListener('click', e => { const p = e.target.dataset && e.target.dataset.p; if(p!==undefined) setPage(p); });
+$('#dat').onclick = openData;
+$('#ov').addEventListener('click', e => { if(e.target.id==='ov') close(); });   // toucher le fond ferme la fenêtre
+document.addEventListener('keydown', e => { if(e.key==='Escape') close(); });
+render(true);
+</script>
+</body>
+</html>
